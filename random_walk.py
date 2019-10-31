@@ -1,5 +1,14 @@
 #! /usr/bin/env python3
+"""
 
+simulates a random walk in 3 dimension
+caluclates the mean square distance covered in any number of dimensions
+fits a linear and quadratic function
+Calulctaes the diffusion constant
+
+plots numbers 
+
+"""
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -13,16 +22,15 @@ no_steps = 1000
 steps = 2e-6*(np.random.rand(no_steps,3)-0.5)
 coords = np.cumsum(steps,axis=0)
 
+# linear fit
 def lin_f(x,a):
     return a*x
-
-def lin_f_shifted(x,a,b):
-    return a*x+b
-
+# quadractic fit function
 def quad_f(x,a,b):
     return a*x**2+b*x
 
-
+# caluclates the means square distance in given dimension
+# finds diffiusion constant
 def plot_D_sim(steps,d):
 
     result = np.zeros(no_steps)
@@ -60,31 +68,8 @@ def plot_2d():
     plt.show()
 
 
-def plot_D():
-
-    T = np.arange(25,46,4)
-    mum05 = np.array([0.63,0.39,0.52,0.56,0.61,0.7])
-    mum2 = np.array([0.29,0.25,0.22,0.4,0.39,0.31])
-
-    lin_coeff,_ = curve_fit(lin_f_shifted,T,mum05)
-    lin_coeff_,_ = curve_fit(lin_f_shifted,T[1:],mum05[1:])
-    lin_graph = lin_f_shifted(T,*lin_coeff)
-    lin_graph_ = lin_f_shifted(T,*lin_coeff_)
-
-    print(lin_coeff)
-    print(lin_coeff_)
-
-    plt.xlabel('Temperatur [$^\circ C$]',fontsize=15)
-    plt.ylabel('D [$\mu m^2/s$]',fontsize = 15)
-    plt.plot(T,mum05,'.',color='blue')
-    plt.plot(T,mum2,'.',color='orange')
-    plt.plot(T,lin_graph,color='gray')
-    plt.plot(T,lin_graph_,color='gray',alpha=0.5)
-
-    plt.show()
-
 if __name__ == '__main__':
 
-    plot_D()
+#    plot_D()
 #    plot_2d()
-#    plot_D_sim(steps,3)
+    plot_D_sim(steps,3)
