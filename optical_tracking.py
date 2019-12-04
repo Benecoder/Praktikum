@@ -3,41 +3,161 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from scipy.optimize import minimize
 import pandas as pd
 
 
-def measure_object():
 
-   names = [str(n) for n in range(18)]
-   names[4] = 'state1'
-   names[9] = 'x1'
-   names[10] = 'y1'
-   names[11] = 'z1'
-   names[14] = 'state2'
-   names[15] = 'x2'
-   names[16] = 'y2'
-   names[17] = 'z2'
+class Line():
 
-   back = pd.read_csv('Data_OT/back.tsv',delimiter='\t',names=names,skiprows=1,index_col='0')
-   front = pd.read_csv('Data_OT/front_2.tsv',delimiter='\t',names=names,skiprows=1,index_col='0')
-   right = pd.read_csv('Data_OT/right.tsv',delimiter='\t',names=names,skiprows=1,index_col='0')
-   left = pd.read_csv('Data_OT/left.tsv',delimiter='\t',names=names,skiprows=1,index_col='0')
+    def __init__(self,v,w):
+        self.v = v
+        self.w = w
 
-   plt.plot(back['x1'])
-   plt.show()
+    def get_point(self,lamda):
+        return lamda*self.v+self.w
 
+    def d(self,x):
+        lamda = np.dot(x,self.v)-np.dot(self.w,self.v)
+        con_vector = self.get_point(lamda)-x
+        return np.sqrt(np.dot(con_vector,con_vector))
+
+    def mse(self,points):
+        ds = np.apply_along_axis(self.d,0,points)
+        return np.mean(ds)
+
+    def get_corner(self,line):
+
+        v1v2 = np.dot(self.v,line.v)
+        w1v2 = np.dot(self.w,line.v)
+        w2v2 = np.dot(line.w,line.v)
+        w2v1 = np.dot(line.w,self.v)
+        w1v1 = np.dot(self.w,self.v)
+
+        mu1 = (w1v2*v1v2-w2v2*v1v2+w2v1-w1v1)/(1-v1v2**2)
+        mu2 = mu1*v1v2+w1v2-w2v2
+
+        return mu1,mu2
+
+    def get_sample(self,b):
+        return np.array([self.get_point(i) for i in np.arange(b-20,b+150,10)])
+
+# deals with the tsv files
+def extract_data(sides,plot1=False,print_measurement=False):
+
+    names = [str(n) for n in range(31)]
+    names[4] = 'state1'
+    names[9] = 'x1'
+    names[10] = 'y1'
+    names[11] = 'z1'
+    names[12] = 'error1'
+    names[14] = 'state2'
+    names[-3] = 'x2'
+    names[-2] = 'y2'
+    names[-1] = 'z2'
+
+
+    file_names = ['Data_OT/'+sides[i]+'.tsv' for i in range(4)]
+    tracks = []
+    errors = []
+
+
+    for side in sides:
+
+        file_name = 'Data_OT/'+side+'.tsv'
+        data = pd.read_csv(file_name,delimiter='\t',names=names,skiprows=1,index_col=2)
+
+        data = data[data['state1']=='OK']
+        tracks.append(np.array([data['x1'],data['y1'],data['z1']]))
+        errors.append(data['error1'])
+
+    return tracks,errors
+
+
+def measure_object(tracks,errors,sides,plot1=False,print_measurement=False,residual=False):
+
+
+    if plot1:
+        fig = plt.figure()
+        ax = fig.add_subplot(111,projection='3d')
+
+    lines = []
+    res = []
+    for i,side in enumerate(sides):
+        if plot1:
+            ax.scatter(tracks[i][0],tracks[i][1],tracks[i][2],marker='.',color='red',alpha=0.4)
+
+        cov = np.cov(tracks[i])
+        w,v = np.linalg.eigh(cov)
+        v_max = v[:,np.argmax(w)]
+        mean = np.mean(tracks[i],axis=1)
+
+        lines.append(Line(v_max,mean))
+        if residual:
+            res.append(lines[-1].mse(tracks[i]))
+
+    if residual:
+        print(res)
+
+
+    # find corner
+    corners = np.zeros((4,3))
+    line_distance = np.zeros(4)
+    for side_i in range(4):
+
+        line1 = lines[side_i-1]
+        line2 = lines[side_i]
+
+        mu1,mu2 = line1.get_corner(line2)
+        corner_l1 = line1.get_point(mu1)
+        corner_l2 = line2.get_point(mu2)
+        line_distance[side_i] = np.linalg.norm(corner_l1-corner_l2)
+        corners[side_i] = (corner_l1+corner_l2)/2.
+
+    d = [np.linalg.norm(corners[i-1]-corners[i]) for i in range(4)]
+
+
+    # plotting fun
+    if print_measurement:
+        print('always in oder of: ')
+        print(sides)
+        print('line_distance in mm')
+        print(line_distance)
+        print('distance between corners')
+        print(d)
+
+
+    if plot1:
+        plotted_line = np.zeros((5,3))
+        plotted_line[:4] = corners
+        plotted_line[-1] = corners[0]
+
+        ax.plot(plotted_line[:,0],plotted_line[:,1],plotted_line[:,2],color='black')
+
+        ax.set_xlabel('x in mm')
+        ax.set_ylabel('y in mm')
+        ax.set_zlabel('z in mm')
+        plt.show()
+
+def error_hist(error):
+
+    tot_error = np.concatenate(error)
+    plt.xlabel('error in mm')
+    plt.ylabel('absolute number')
+    plt.hist(tot_error,bins=60)
+    plt.show()
 
 def plot_track(track1,track2):
 
-   fig = plt.figure()
-   ax = fig.add_subplot(111,projection='3d')
-   ax.scatter(track1[0],track1[1],track1[2])
-   ax.scatter(track2[0],track2[1],track2[2])
-   ax.set_xlabel('x in mm')
-   ax.set_ylabel('y in mm')
-   ax.set_zlabel('z in mm')
+    fig = plt.figure()
+    ax = fig.add_subplot(111,projection='3d')
+    ax.scatter(track1[0],track1[1],track1[2])
+    ax.scatter(track2[0],track2[1],track2[2])
+    ax.set_xlabel('x in mm')
+    ax.set_ylabel('y in mm')
+    ax.set_zlabel('z in mm')
 
-   plt.show()
+    plt.show()
 
 
 def get_hist(d,title):
@@ -150,4 +270,12 @@ def get_accuracy():
 
 
 
-measure_object()
+
+
+if __name__ == '__main__':
+
+    global_sides = ['front_2', 'right', 'back', 'left']
+    local_sides = ['frontlocal','rightlocal','backlocal','leftlocal']
+
+    tracks,errors = extract_data(global_sides)
+    measure_object(tracks,errors,global_sides,plot1=True,residual=True)
